@@ -1,0 +1,64 @@
+# SeisFoundation -- single config for all model variants.
+#
+# Two switches at the top of `model` control everything:
+#   input_type: '1d' | 'multi_1d' | '2d'
+#   use_mae:    true | false
+#
+# Keys not relevant to the chosen input_type are ignored, so you can edit
+# the switches without deleting anything.
+
+model:
+  # ---- switches ----
+  input_type: '1d'        # '1d' = single trace, 'multi_1d' = multi-trace gather, '2d' = 2D patch
+  use_mae: true           # true = masked autoencoder; false = plain (unmasked) autoencoder
+  mask_ratio: 0.75        # used only when use_mae=true
+  norm_pix_loss: false    # per-patch normalization of the reconstruction target
+
+  # ---- position encoding ----
+  pos_embed_type: 'rope'  # 'rope' = rotary (relative, no params) |
+                          # 'sinusoidal' = fixed sin/cos absolute (no params) |
+                          # 'learnable' = learned absolute (MAE-paper style)
+  rope_base: 10000.0      # RoPE base frequency (only used when pos_embed_type='rope')
+
+  # ---- patch-embed inputs (used per input_type) ----
+  trace_length: 1024      # used by '1d' and 'multi_1d'
+  num_traces:   32        # used by 'multi_1d'
+  img_size:     [128, 128]  # used by '2d'
+  patch_size:   16        # used by all three (int for '1d'/'multi_1d'/'2d'; list ok for '2d')
+  in_channels:  1         # used by '1d' and '2d'
+
+  # ---- transformer backbone (shared across input_types) ----
+  embed_dim: 256
+  depth: 6
+  num_heads: 8
+  mlp_ratio: 4.0
+  decoder_embed_dim: 128
+  decoder_depth: 2
+  decoder_num_heads: 4
+
+data:
+  data_path: null         # set to a directory of .npy files for real data; null => synthetic
+  num_samples: 4096       # synthetic only
+  batch_size: 32
+  num_workers: 0
+  pin_memory: true
+  normalize: 'none'       # per-sample normalization applied at load time:
+                          #   'none' | 'zscore' | 'minmax' | 'rms' | 'max_abs'
+                          # Joint over all elements -- preserves relative trace amplitudes (AVO).
+                          # Independent of model.norm_pix_loss (which is per-patch, inside the loss).
+
+train:
+  epochs: 20
+  lr: 1.0e-4
+  weight_decay: 0.05
+  betas: [0.9, 0.95]
+  grad_clip: 1.0
+  device: cpu             # 'cpu' | 'cuda' | 'mps'
+  log_interval: 20
+  ckpt_dir: ./checkpoints
+
+inference:
+  ckpt_path: ./checkpoints/epoch_000.pt   # full checkpoint (has both encoder + decoder)
+  out_dir:   ./inference_out
+  mask_ratio: 0.0         # 0 = full reconstruction; >0 emulates MAE at inference time
+  max_batches: 4          # cap number of batches to run (null = all)

@@ -9,7 +9,7 @@
 
 model:
   # ---- switches ----
-  input_type: '1d'        # '1d' = single trace, 'multi_1d' = multi-trace gather, '2d' = 2D patch
+  input_type: 'multi_1d'  # '1d' = single trace, 'multi_1d' = multi-trace gather, '2d' = 2D patch
   use_mae: true           # true = masked autoencoder; false = plain (unmasked) autoencoder
   mask_ratio: 0.75        # used only when use_mae=true
   norm_pix_loss: false    # per-patch normalization of the reconstruction target
@@ -38,8 +38,8 @@ model:
 
 data:
   data_path: null         # set to a directory of .npy files for real data; null => synthetic
-  num_samples: 4096       # synthetic only
-  batch_size: 32
+  num_samples: 1024       # synthetic only (was: 4096)
+  batch_size: 16          # (was: 32)
   num_workers: 0
   pin_memory: true
   normalize: 'none'       # per-sample normalization applied at load time:
@@ -48,7 +48,7 @@ data:
                           # Independent of model.norm_pix_loss (which is per-patch, inside the loss).
 
 train:
-  epochs: 20
+  epochs: 3               # number of epochs to train (was: 20)
   lr: 1.0e-4
   weight_decay: 0.05
   betas: [0.9, 0.95]

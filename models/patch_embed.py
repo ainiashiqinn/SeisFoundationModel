@@ -15,7 +15,7 @@ class PatchEmbed1D(nn.Module):
         self.in_channels = in_channels
         self.num_patches = trace_length // patch_size
         self.patch_dim = in_channels * patch_size
-        self.proj = nn.Conv1d(in_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
+        self.proj = nn.Conv1d(in_channels, embed_dim, kernel_size=patch_size, stride=patch_size)        # embedding layer: (B, C, T) -> (B, D, N) where N = T / patch_size
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if x.dim() == 2:
@@ -27,7 +27,7 @@ class PatchEmbed1D(nn.Module):
         if x.dim() == 2:
             x = x.unsqueeze(1)
         B, C, T = x.shape
-        x = x.reshape(B, C, self.num_patches, self.patch_size)
+        x = x.reshape(B, C, self.num_patches, self.patch_size)                              # (B, C, T) -> (B, C, N, P)
         return x.permute(0, 2, 1, 3).reshape(B, self.num_patches, C * self.patch_size)
 
     def unpatchify(self, x: torch.Tensor) -> torch.Tensor:

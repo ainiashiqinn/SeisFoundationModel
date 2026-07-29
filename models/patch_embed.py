@@ -18,23 +18,36 @@ class PatchEmbed1D(nn.Module):
         self.proj = nn.Conv1d(in_channels, embed_dim, kernel_size=patch_size, stride=patch_size)        # embedding layer: (B, C, T) -> (B, D, N) where N = T / patch_size
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Feeds the encoder with a batch of traces.  
+        Input: (B, T) or (B, C, T).  
+        Output: (B, N, D) where N = T / patch_size."""
+
         if x.dim() == 2:
             x = x.unsqueeze(1)
         x = self.proj(x)              # (B, D, N)
         return x.transpose(1, 2)      # (B, N, D)
 
     def patchify(self, x: torch.Tensor) -> torch.Tensor:
+        """Converts a batch of traces into patches.
+        Builds a reconstruction target for the MAE loss.
+        Input: (B, T) or (B, C, T).
+        Output: (B, N, C*P) where N = T / patch_size and P = patch_size."""
+
         if x.dim() == 2:
             x = x.unsqueeze(1)
         B, C, T = x.shape
         x = x.reshape(B, C, self.num_patches, self.patch_size)                              # (B, C, T) -> (B, C, N, P)
-        return x.permute(0, 2, 1, 3).reshape(B, self.num_patches, C * self.patch_size)
+        return x.permute(0, 2, 1, 3).reshape(B, self.num_patches, C * self.patch_size)      # (B, C, N, P) -> (B, N, C, P) -> (B, N, C*P)
 
     def unpatchify(self, x: torch.Tensor) -> torch.Tensor:
+        """Converts a batch of patches into traces.
+        Input: (B, N, C*P).
+        Output: (B, C, T) where N = T / patch_size and P = patch_size."""
+
         # x: (B, N, C*P) -> (B, C, T)
         B, N, _ = x.shape
-        x = x.reshape(B, N, self.in_channels, self.patch_size)
-        return x.permute(0, 2, 1, 3).reshape(B, self.in_channels, N * self.patch_size)
+        x = x.reshape(B, N, self.in_channels, self.patch_size)                              # (B, N, C*P) -> (B, N, C, P)
+        return x.permute(0, 2, 1, 3).reshape(B, self.in_channels, N * self.patch_size)      # (B, N, C, P) -> (B, C, N, P) -> (B, C, T)
 
 
 class PatchEmbedMulti1D(nn.Module):
@@ -63,6 +76,7 @@ class PatchEmbedMulti1D(nn.Module):
         return x.flatten(2).transpose(1, 2)      # (B, C * time_patches, D)
 
     def patchify(self, x: torch.Tensor) -> torch.Tensor:
+        # x: (B, C, T) -> (B, C * time_patches, P)
         B, C, T = x.shape
         x = x.reshape(B, C, self.time_patches, self.patch_size)
         return x.reshape(B, C * self.time_patches, self.patch_size)
@@ -111,7 +125,7 @@ class PatchEmbed2D(nn.Module):
         B, C, H, W = x.shape
         ph, pw = self.patch_size
         x = x.reshape(B, C, self.grid_h, ph, self.grid_w, pw)
-        return x.permute(0, 2, 4, 1, 3, 5).reshape(B, self.num_patches, C * ph * pw)
+        return x.permute(0, 2, 4, 1, 3, 5).reshape(B, self.num_patches, C * ph * pw)    # (B, C, H, W) -> (B, gh, gw, C, ph, pw) -> (B, gh*gw, C*ph*pw)
 
     def unpatchify(self, x: torch.Tensor) -> torch.Tensor:
         # x: (B, N, C*ph*pw) -> (B, C, H, W)

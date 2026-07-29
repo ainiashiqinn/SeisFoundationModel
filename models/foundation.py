@@ -323,10 +323,10 @@ class SeisFoundation(nn.Module):
             var = target.var(dim=-1, keepdim=True)
             target = (target - mean) / (var + 1e-6).sqrt()
 
-        loss = ((pred - target) ** 2).mean(dim=-1)    # (B, N)
+        loss = ((pred - target) ** 2).mean(dim=-1)      # (B, N)
         if mask is not None:
             denom = mask.sum().clamp(min=1.0)
-            return (loss * mask).sum() / denom
+            return (loss * mask).sum() / denom          # mean loss over masked patches
         return loss.mean()
 
     def forward(self, x: torch.Tensor) -> dict:

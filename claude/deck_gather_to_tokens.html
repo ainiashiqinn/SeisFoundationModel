@@ -79,6 +79,9 @@ svg{overflow:visible}
 .cell.pick{fill:#1e3a5f;stroke:var(--accent);stroke-width:2}
 .celltxt{font-family:var(--mono);font-size:10px;fill:var(--dim);transition:all .55s cubic-bezier(.4,0,.2,1)}
 .celltxt.pick{fill:var(--accent)}
+.cellg{transition:transform .65s cubic-bezier(.4,0,.2,1)}
+.cellg .depth{transition:opacity .4s ease}
+#flatgridlab,#flatbracket,#flatswap{transition:opacity .4s ease}
 </style>
 </head>
 <body>
@@ -229,10 +232,44 @@ svg{overflow:visible}
   </div>
 </section>
 
-<!-- 3 GRID -->
+<!-- 3 FORK -->
+<section class="slide" data-steps="5">
+  <div class="tag">patch_embed.py:73 forward &nbsp;·&nbsp; patch_embed.py:78 patchify</div>
+  <h2>3 · Two paths out of the same gather</h2>
+  <div class="sub">Before going into the mechanics: the gather is used <em>twice</em>, in two
+    unrelated ways. Both methods live on the same class, and both take
+    <span class="shape">(B, 32, 1024)</span>.</div>
+  <div class="body" style="align-items:center">
+    <div class="col" style="flex:1.4">
+      <svg width="640" height="380" viewBox="0 0 640 380"><g id="forkviz"></g></svg>
+    </div>
+    <div class="col">
+      <div class="note step">
+        <b style="color:var(--accent)">forward</b> — a learned <code>nn.Conv2d</code>.
+        Produces what the <b>encoder</b> reads. 16 → 256.
+      </div>
+      <div class="note step">
+        <b style="color:var(--good)">patchify</b> — two <code>reshape</code> calls, zero weights.
+        Produces the <b>reconstruction target</b> for the loss
+        (<code>foundation.py:forward_loss</code>). 16 stays 16.
+      </div>
+      <div class="note step warnbox">
+        <b>The conv output is never compared to anything.</b> The loss compares the
+        decoder's prediction against the <em>reshape</em>. <code>forward</code> does not call
+        <code>patchify</code>, and <code>patchify</code> has no parameters to train.
+      </div>
+      <div class="step small" style="margin-top:14px">
+        This is why <code>decoder_pred = nn.Linear(decoder_embed_dim, patch_dim)</code>
+        maps back to <b>16</b>, not to 256.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 4 GRID -->
 <section class="slide" data-steps="4">
   <div class="tag">models/patch_embed.py · PatchEmbedMulti1D.__init__ lines 62–71</div>
-  <h2>3 · Cut the gather into patches</h2>
+  <h2>4 · Cut the gather into patches</h2>
   <div class="sub">Time is chopped every 16 samples. The trace axis is <em>never</em> cut — it is already discrete.</div>
   <div class="body">
     <div class="col" style="flex:1.25">
@@ -270,10 +307,10 @@ svg{overflow:visible}
   </div>
 </section>
 
-<!-- 4 ONE PATCH -->
+<!-- 5 ONE PATCH -->
 <section class="slide" data-steps="4">
-  <div class="tag">one trace out of the 32 · patch_size = 16</div>
-  <h2>4 · What one patch actually is</h2>
+  <div class="tag">the patchify branch · one trace out of the 32</div>
+  <h2>5 · What one patch actually is</h2>
   <div class="sub">Follow a single trace all the way down. A patch is 16 consecutive time samples on
     <em>one</em> trace — it never spans two traces.</div>
   <div class="body">
@@ -306,50 +343,19 @@ svg{overflow:visible}
   </div>
 </section>
 
-<!-- 5 FORK -->
-<section class="slide" data-steps="5">
-  <div class="tag">patch_embed.py:73 forward &nbsp;·&nbsp; patch_embed.py:78 patchify</div>
-  <h2>5 · The same patch takes two separate paths</h2>
-  <div class="sub">This is the single most misread part of the file. Both methods live on the same class, both take
-    <span class="shape">(B, 32, 1024)</span> — and they are never composed.</div>
-  <div class="body" style="align-items:center">
-    <div class="col" style="flex:1.4">
-      <svg width="640" height="380" viewBox="0 0 640 380"><g id="forkviz"></g></svg>
-    </div>
-    <div class="col">
-      <div class="note step">
-        <b style="color:var(--accent)">forward</b> — a learned <code>nn.Conv2d</code>.
-        Produces what the <b>encoder</b> reads. 16 → 256.
-      </div>
-      <div class="note step">
-        <b style="color:var(--good)">patchify</b> — two <code>reshape</code> calls, zero weights.
-        Produces the <b>reconstruction target</b> for the loss
-        (<code>foundation.py:forward_loss</code>). 16 stays 16.
-      </div>
-      <div class="note step warnbox">
-        <b>The conv output is never compared to anything.</b> The loss compares the
-        decoder's prediction against the <em>reshape</em>. <code>forward</code> does not call
-        <code>patchify</code>, and <code>patchify</code> has no parameters to train.
-      </div>
-      <div class="step small" style="margin-top:14px">
-        This is why <code>decoder_pred = nn.Linear(decoder_embed_dim, patch_dim)</code>
-        maps back to <b>16</b>, not to 256.
-      </div>
-    </div>
-  </div>
-</section>
-
 <!-- 6 CONV -->
 <section class="slide" data-steps="5">
-  <div class="tag">patch_embed.py:71 · nn.Conv2d(1, 256, kernel_size=(1,16), stride=(1,16))</div>
+  <div class="tag">the forward branch · patch_embed.py:71 · nn.Conv2d(1, 256, k=(1,16), s=(1,16))</div>
   <h2>6 · The convolution is a per-patch linear map</h2>
   <div class="sub">Because <span class="mono">stride == kernel_size</span>, the windows tile without overlap — the conv degenerates into one matrix multiply per patch.</div>
   <div class="body">
     <div class="col" style="flex:1.15">
-      <svg width="580" height="320" viewBox="0 0 580 320"><g id="convviz"></g></svg>
-      <div class="step small" style="margin-top:8px">
-        kernel height = <b style="color:var(--warn)">1</b> → the window never covers two traces.
-      </div>
+      <svg width="580" height="290" viewBox="0 0 580 290"><g id="convviz"></g></svg>
+      <div class="eq step" style="white-space:pre;font-size:14.5px;line-height:1.6;margin-top:4px">(B, <span class="n">32</span>, <span class="n">1024</span>)
+  <span class="c">unsqueeze(1) ↓  line 74</span>
+(B, <span class="n">1</span>, <span class="n">32</span>, <span class="n">1024</span>)      <span class="c"># conv needs a channel axis</span>
+  <span class="c">proj — Conv2d ↓  line 75</span>
+(B, <span class="n">256</span>, <span class="n">32</span>, <span class="n">64</span>)     <span class="c"># 256 channels, 32 × 64 grid</span></div>
     </div>
     <div class="col">
       <div class="eq step">
@@ -380,35 +386,35 @@ svg{overflow:visible}
 <!-- 7 FLATTEN -->
 <section class="slide" data-steps="5">
   <div class="tag">patch_embed.py:76 · x.flatten(2).transpose(1,2)</div>
-  <h2>7 · The 2D grid is flattened into one sequence</h2>
-  <div class="sub">The transformer wants a list of tokens, not a grid. Row-major: angle is the outer loop.</div>
+  <h2>7 · The grid is flattened into one sequence</h2>
+  <div class="sub">Picking up exactly where slide 6 ended, at <span class="shape">(B, 256, 32, 64)</span>.
+    One line of code turns that grid into the list the transformer wants.</div>
   <div class="body">
-    <div class="col" style="flex:1.3">
-      <svg width="620" height="400" viewBox="0 0 620 400"><g id="flatviz"></g></svg>
+    <div class="col" style="flex:1.45">
+      <svg width="640" height="430" viewBox="0 0 640 430"><g id="flatviz"></g></svg>
     </div>
     <div class="col">
-      <div class="eq step">
-        k = angle * <span class="n">64</span> + time<br><br>
+      <div class="step small" style="line-height:1.7">
+        A transformer takes a <b style="color:var(--fg)">sequence</b>: one axis of tokens, one axis
+        of features. It has no concept of a 2D grid — so the (angle, time) grid has to be
+        unrolled into a line.
+      </div>
+      <div class="eq step" style="margin-top:14px">
+        k = angle * <span class="n">64</span> + time<br>
         angle = k // <span class="n">64</span><br>
         time&nbsp; = k %&nbsp; <span class="n">64</span>
       </div>
-      <div class="step small" style="line-height:1.8">
-        The multiplier is <b style="color:var(--accent2)">time_patches = 64</b>, not num_traces.<br>
+      <div class="step small" style="line-height:1.75;margin-top:10px">
+        Multiplier is <b style="color:var(--accent2)">time_patches = 64</b> —
+        every 64 consecutive tokens are one angle/trace.<br>
         Token 100 → angle <b>1</b>, time <b>36</b>, samples 576–591.<br>
         Consecutive tokens are neighbours <b>in time</b>.<br>
-        Tokens 64 apart are neighbours <b>in angle</b>, same time.
+        Tokens 64 apart are neighbours <b>in angle</b>.
       </div>
       <div class="note step">
-        Identical arithmetic is rebuilt in <code>foundation.py:_register_axis_positions</code>
-        lines 120–121 as <code>repeat_interleave(tp)</code> and <code>repeat(nt)</code> —
-        that is how RoPE recovers each token's (angle, time) coordinate after flattening.
-      </div>
-      <div class="step">
-        <div class="flow" style="margin-top:8px">
-          <div class="box"><div class="t">grid</div><div class="s">(B,256,32,64)</div></div>
-          <span class="arrow">→</span>
-          <div class="box"><div class="t">tokens</div><div class="s">(B,2048,256)</div></div>
-        </div>
+        The same arithmetic is rebuilt in <code>foundation.py</code> lines 120–121 as
+        <code>repeat_interleave(tp)</code> and <code>repeat(nt)</code> — that is how RoPE
+        recovers each token's (angle, time) coordinate after the grid is gone.
       </div>
     </div>
   </div>
@@ -425,8 +431,10 @@ svg{overflow:visible}
         <li class="step">The conv kernel is <span class="mono">(1, 16)</span>. Height 1.
           Token <span class="mono">(angle 7, time 21)</span> is computed from
           <b>16 numbers on trace 7 only</b>.</li>
-        <li class="step">So moveout continuity, wavelet stretch across offset, and the
-          amplitude-vs-angle trend are <b>invisible</b> to the patch embedding.</li>
+        <li class="step">So the two things that <em>define</em> a gather —
+          how an event's arrival time shifts from trace to trace, and how its amplitude changes
+          with angle — are <b>invisible</b> to the patch embedding. Both are cross-trace
+          relationships, and nothing here looks across traces.</li>
         <li class="step">The <b>only</b> mechanism that can relate trace 7 to trace 25 is
           <b style="color:var(--accent)">self-attention</b> in the encoder blocks.</li>
         <li class="step">And attention alone is permutation-equivariant — it cannot tell
@@ -452,8 +460,7 @@ svg{overflow:visible}
         </div>
       </div>
       <div class="step small" style="margin-top:20px">
-        Units 1–3 carried the deep-learning foundation from zero. That cost is paid once;
-        4–9 build on it.
+        Units 1–3 carried the deep-learning foundation from zero. Units 4–9 build on it.
       </div>
     </div>
   </div>
@@ -477,11 +484,6 @@ svg{overflow:visible}
       <tr><td>decoder_pred</td><td>foundation.py:105</td><td>(4, 2048, 16)</td></tr>
       <tr class="hl"><td>loss target</td><td>patchify, no weights</td><td>(4, 2048, 16)</td></tr>
     </table>
-    <div class="note step">
-      With <code>mask_ratio = 0.75</code> the encoder actually sees
-      <span class="mono">len_keep = 512</span> tokens plus CLS — <span class="shape">(4, 513, 256)</span>.
-      The decoder reinserts mask tokens to get back to 2048 before predicting.
-    </div>
   </div></div>
 </section>
 
@@ -699,7 +701,7 @@ function el(tag,attrs,txt){var e=document.createElementNS(NS,tag);
   X.appendChild(el('circle',{cx:310,cy:275,r:15,fill:'#0e1117',stroke:'#ff6b6b','stroke-width':1.5}));
   X.appendChild(txt(310,281,'≠','#ff6b6b',17));
   X.appendChild(txt(310,320,'never compared to each other','#ff6b6b',12));
-  X.appendChild(txt(310,338,'the loss compares  decoder_pred  vs  patchify','#8d99ae',11));
+  X.appendChild(txt(310,344,'2048 = 32 × 64 patches — derived on the next slide','#5c6779',11));
 })();
 
 /* ---------- slide 6 : conv sliding ---------- */
@@ -733,46 +735,86 @@ function el(tag,attrs,txt){var e=document.createElementNS(NS,tag);
   n4.setAttribute('class','step');g.appendChild(n4);
 })();
 
-/* ---------- slide 7 : flatten ---------- */
+/* ---------- slide 7 : grid → sequence ---------- */
+var ROWCOL=['#4da3ff','#ffb454','#5fd39a','#c58cff'];
 (function(){
   var g=document.getElementById('flatviz');
-  var ROWS=4,COLS=6,cw=44,ch=30,ox=10,oy=60;
-  g.appendChild(el('text',{x:ox,y:26,fill:'#8d99ae','font-size':12,'font-family':'monospace'},'schematic: 4 angles × 6 time-patches   (real: 32 × 64)'));
-  g.appendChild(el('text',{x:ox,y:46,fill:'#5c6779','font-size':11,'font-family':'monospace'},'cell label = token index k'));
+  var ROWS=4,COLS=6,CW=22,CH=24;
+  var GX=150,GY=150,GSX=30,GSY=32;           // grid origin + spacing
+  function tt(x,y,t,col,sz,anc,id){var e=el('text',{x:x,y:y,fill:col,'font-size':sz,
+    'text-anchor':anc||'start','font-family':'monospace'},t); if(id)e.setAttribute('id',id);
+    g.appendChild(e); return e;}
+  // headers
+  tt(0,26,'','#ffb454',21,'start','flatshape').setAttribute('font-weight','600');
+  tt(0,50,'','#8d99ae',12.5,'start','flatcap');
+  tt(0,76,'','#4da3ff',13,'start','flatop');
+  tt(0,104,'schematic: 4 angles × 6 time-patches   (real: 32 × 64)   ·   cell label = token index k','#5c6779',11);
+  // grid axis labels
+  var glab=el('g');glab.setAttribute('id','flatgridlab');g.appendChild(glab);
+  for(var r2=0;r2<ROWS;r2++)
+    glab.appendChild(el('text',{x:GX-12,y:GY+r2*GSY+16,fill:ROWCOL[r2],'font-size':10,
+      'text-anchor':'end','font-family':'monospace'},'a'+r2));
+  glab.appendChild(el('text',{x:GX+COLS*GSX/2,y:GY-10,fill:'#5c6779','font-size':10,
+    'text-anchor':'middle','font-family':'monospace'},'time-patch  →'));
+  // cells, each a <g> moved by transform
   window._flatCells=[];
   for(var r=0;r<ROWS;r++)for(var c=0;c<COLS;c++){
     var k=r*COLS+c;
-    var rc=el('rect',{x:ox+c*cw,y:oy+r*ch,width:cw-3,height:ch-3,rx:3});
-    rc.setAttribute('class','cell');g.appendChild(rc);
-    var tx=el('text',{x:ox+c*cw+(cw-3)/2,y:oy+r*ch+18,'text-anchor':'middle'},String(k));
-    tx.setAttribute('class','celltxt');g.appendChild(tx);
-    window._flatCells.push({rc:rc,tx:tx,r:r,c:c,k:k});
+    var cg=el('g');cg.setAttribute('class','cellg');
+    cg.setAttribute('transform','translate('+(GX+c*GSX)+','+(GY+r*GSY)+')');
+    // depth stack (the 256 channel axis) — hidden until stage 1
+    var dep=el('g');dep.setAttribute('class','depth');
+    dep.appendChild(el('rect',{x:6,y:-6,width:CW,height:CH,rx:3,fill:'#0e1117',
+      stroke:ROWCOL[r],'stroke-width':1,opacity:.35}));
+    dep.appendChild(el('rect',{x:3,y:-3,width:CW,height:CH,rx:3,fill:'#131926',
+      stroke:ROWCOL[r],'stroke-width':1,opacity:.6}));
+    cg.appendChild(dep);
+    cg.appendChild(el('rect',{x:0,y:0,width:CW,height:CH,rx:3,fill:'#1d2836',
+      stroke:ROWCOL[r],'stroke-width':1.3}));
+    cg.appendChild(el('text',{x:CW/2,y:16,fill:'#e8ecf3','font-size':10,
+      'text-anchor':'middle','font-family':'monospace'},String(k)));
+    g.appendChild(cg);
+    window._flatCells.push({g:cg,r:r,c:c,k:k});
   }
-  for(var r2=0;r2<ROWS;r2++)
-    g.appendChild(el('text',{x:ox-8,y:oy+r2*ch+18,fill:'#5c6779','font-size':10,'text-anchor':'end','font-family':'monospace'},'a'+r2));
-  var lbl=el('text',{x:ox,y:380,fill:'#4da3ff','font-size':12,'font-family':'monospace'});
-  lbl.setAttribute('id','flatlbl');g.appendChild(lbl);
+  // strip bracket, shown once flattened
+  var br=el('g');br.setAttribute('id','flatbracket');br.setAttribute('opacity','0');
+  br.appendChild(el('path',{d:'M 14 300 L 14 308 L 590 308 L 590 300',stroke:'#5c6779',
+    'stroke-width':1.2,fill:'none'}));
+  br.appendChild(el('text',{x:302,y:326,fill:'#8d99ae','font-size':11.5,
+    'text-anchor':'middle','font-family':'monospace'},'k = 0 … 2047     one sequence, 2048 tokens long'));
+  g.appendChild(br);
+  // transpose swap annotation
+  var sw=el('g');sw.setAttribute('id','flatswap');sw.setAttribute('opacity','0');
+  sw.appendChild(el('text',{x:0,y:378,fill:'#8d99ae','font-size':12,'font-family':'monospace'},
+    'transpose only relabels the axes — not a single number moves.'));
+  sw.appendChild(el('text',{x:0,y:400,fill:'#5c6779','font-size':11.5,'font-family':'monospace'},
+    '(B, 256, 2048)  →  (B, 2048, 256)      token axis in the middle, features last'));
+  g.appendChild(sw);
 })();
-function flatten(on){
-  var cells=window._flatCells,ROWS=4,COLS=6,cw=44,ch=30,ox=10,oy=60;
+function flatStage(n){
+  var cells=window._flatCells; if(!cells) return;
+  var GX=150,GY=150,GSX=30,GSY=32, SX=14,SY=262,SSX=24;
   cells.forEach(function(o){
-    if(on){
-      var k=o.k, X=ox+330+Math.floor(k/12)*70, Y=oy+(k%12)*24;
-      o.rc.setAttribute('x',X);o.rc.setAttribute('y',Y);
-      o.rc.setAttribute('width',60);o.rc.setAttribute('height',21);
-      o.tx.setAttribute('x',X+30);o.tx.setAttribute('y',Y+15);
-      o.rc.setAttribute('class','cell'+(o.r===1?' pick':''));
-      o.tx.setAttribute('class','celltxt'+(o.r===1?' pick':''));
-    }else{
-      o.rc.setAttribute('x',ox+o.c*cw);o.rc.setAttribute('y',oy+o.r*ch);
-      o.rc.setAttribute('width',cw-3);o.rc.setAttribute('height',ch-3);
-      o.tx.setAttribute('x',ox+o.c*cw+(cw-3)/2);o.tx.setAttribute('y',oy+o.r*ch+18);
-      o.rc.setAttribute('class','cell');o.tx.setAttribute('class','celltxt');
-    }
+    var t = n>=2 ? 'translate('+(SX+o.k*SSX)+','+SY+')'
+                 : 'translate('+(GX+o.c*GSX)+','+(GY+o.r*GSY)+')';
+    o.g.setAttribute('transform',t);
+    o.g.querySelector('.depth').setAttribute('opacity', n>=1?'1':'0');
   });
-  document.getElementById('flatlbl').textContent = on
-    ? 'one column of 2048 tokens — angle 1 highlighted, k = 6…11'
-    : '';
+  document.getElementById('flatgridlab').setAttribute('opacity', n>=2?'0':'1');
+  document.getElementById('flatbracket').setAttribute('opacity', n>=2?'1':'0');
+  document.getElementById('flatswap').setAttribute('opacity', n>=3?'1':'0');
+  var shape = n>=3 ? '(B, 2048, 256)' : n>=2 ? '(B, 256, 2048)' : '(B, 256, 32, 64)';
+  var cap = n>=3 ? '2048 tokens, each a 256-vector  —  what the encoder reads'
+          : n>=2 ? 'the 32 × 64 grid is now one axis of length 2048'
+          : n>=1 ? 'a 256-long vector sits at every (angle, time) position'
+          :        'the output of the conv on slide 6';
+  var op  = n>=3 ? 'x.transpose(1, 2)   — swap the channel and token axes'
+          : n>=2 ? 'x.flatten(2)        — collapse the last two axes into one'
+          : n>=1 ? 'the 256 is depth, not another grid direction'
+          :        '';
+  document.getElementById('flatshape').textContent=shape;
+  document.getElementById('flatcap').textContent=cap;
+  document.getElementById('flatop').textContent=op;
 }
 
 /* ---------- conv window animation ---------- */
@@ -822,7 +864,7 @@ function render(){
   document.getElementById('cnt').textContent=(si+1)+' / '+slides.length;
   if(si===IDX_GRID) gridReveal(st); else gridReveal(0);
   convAnim(si===IDX_CONV && st>=1);
-  flatten(si===IDX_FLAT && st>=2);
+  flatStage(si===IDX_FLAT ? st : 0);
 }
 function next(){
   var n=slides[si].querySelectorAll('.step').length;

@@ -70,9 +70,9 @@ class RopeAttention(nn.Module):
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
         self.attn_dropout = dropout
-        self.qkv = nn.Linear(dim, dim * 3)
-        self.proj = nn.Linear(dim, dim)
-        self.proj_drop = nn.Dropout(dropout)
+        self.qkv = nn.Linear(dim, dim * 3)      # applies linear projection to get q, k, v by applying matmul with W and b
+        self.proj = nn.Linear(dim, dim)         # applies linear projection to mix the heads back together (768, 256)
+        self.proj_drop = nn.Dropout(dropout)    # applies dropout to the output of the projection layer (only qkv, not the attention weights)
 
     def forward(self, x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
         B, N, D = x.shape
